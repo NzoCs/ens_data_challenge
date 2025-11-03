@@ -13,15 +13,10 @@ class Columns(StrEnum):
     
 class CytoColumns(StrEnum):
     IS_NORMAL = "is_normal"
-    PLOIDY = "ploidy"
     HAS_TP53_DELETION = "has_tp53_deletion"
     HAS_COMPLEX_CHR3 = "has_complex_chr3"
     N_ABNORMALITIES = "n_abnormalities"
     N_CHROMOSOMES_AFFECTED = "n_chromosomes_affected"
-    HAS_MONOSOMY_7 = "has_monosomy_7"
-    HAS_DEL_5Q = "has_del_5q"
-    HAS_DEL_7Q = "has_del_7q"
-    HAS_MONOSOMY_Y = "has_monosomy_y"
     N_DELETIONS = "n_deletions"
     N_CRITICAL_REGIONS_DELETED = "n_critical_regions_deleted"
     HAS_LARGE_DELETION = "has_large_deletion"
@@ -30,7 +25,6 @@ class CytoColumns(StrEnum):
     ABNORMAL_CLONE_PERCENTAGE = "abnormal_clone_percentage"
     COMPUTED_RISK_SCORE = "computed_risk_score"
     MDS_IPSS_R_CYTO_RISK = "mds_ipss_r_cyto_risk"
-    MDS_IPSS_CYTO_RISK = "mds_ipss_cyto_risk"
     AML_ELN_2022_CYTO_RISK = "aml_eln_2022_cyto_risk"
     CLL_CYTO_RISK = "cll_cyto_risk"
     MM_RISS_CYTO_RISK = "mm_riss_cyto_risk"
@@ -46,6 +40,21 @@ class MolecularColumns(StrEnum):
     ALT = "ALT"
     PROT_CHANGE = "PROTEIN_CHANGE"
     EFFECT = "EFFECT"
+
+class CytoStructColumns(StrEnum):
+    ID = "ID"
+    CLONE_INDEX = "clone_index"
+    CLONE_CELL_COUNT = "clone_cell_count"
+    PLOIDY = "ploidy"
+    SEX_CHROMOSOMES = "sex_chromosomes"
+    MUTATION_TYPE = "mutation_type"
+    CHROMOSOME = "chromosome"
+    ARM = "arm"
+    START = "start"
+    END = "end"
+    START_ARM = "start_arm"
+    END_ARM = "end_arm"
+    RAW = "raw"
 
 # Gènes pronostiques établis dans MDS/AML
 class HighRiskGenes(StrEnum):

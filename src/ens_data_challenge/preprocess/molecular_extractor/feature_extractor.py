@@ -1,205 +1,15 @@
 import pandas as pd
 import numpy as np
-from collections import defaultdict, Counter
-import re
+from collections import Counter
 from typing import Dict, List, Tuple, Optional
-import warnings
-warnings.filterwarnings('ignore')
 
-
-class ClinVarAnnotator:
-    """
-    Annotateur ClinVar pour pathogénicité
-    """
-    
-    def __init__(self):
-        self.variants = {}
-        
-    def load_from_file(self, filepath: str) -> Dict:
-        """
-        Charge ClinVar depuis VCF ou TSV
-        Format: chr, pos, ref, alt, clinical_significance, review_status
-        """
-        try:
-            df = pd.read_csv(filepath, sep='\t', low_memory=False)
-            print(f"✓ ClinVar chargé: {len(df)} variants")
-            
-            for _, row in df.iterrows():
-                chr_val = str(row.get('chr', row.get('Chromosome', ''))).replace('chr', '')
-                pos = row.get('pos', row.get('Position', 0))
-                ref = row.get('ref', row.get('ReferenceAllele', ''))
-                alt = row.get('alt', row.get('AlternateAllele', ''))
-                
-                key = f"{chr_val}:{pos}:{ref}:{alt}"
-                
-                self.variants[key] = {
-                    'clinical_significance': row.get('ClinicalSignificance', 'Uncertain'),
-                    'review_status': row.get('ReviewStatus', 0),
-                    'pathogenicity_score': self._calc_pathogenicity_score(
-                        row.get('ClinicalSignificance', '')
-                    )
-                }
-            
-            return self.variants
-            
-        except Exception as e:
-            print(f"Erreur chargement ClinVar: {e}")
-            return self._load_default_clinvar()
-    
-    def _calc_pathogenicity_score(self, significance: str) -> float:
-        """Convertit significance en score 0-1"""
-        sig_lower = str(significance).lower()
-        if 'pathogenic' in sig_lower and 'likely' not in sig_lower:
-            return 1.0
-        elif 'likely pathogenic' in sig_lower:
-            return 0.8
-        elif 'uncertain' in sig_lower or 'vus' in sig_lower:
-            return 0.5
-        elif 'likely benign' in sig_lower:
-            return 0.2
-        elif 'benign' in sig_lower:
-            return 0.0
-        else:
-            return 0.5
-    
-    def _load_default_clinvar(self) -> Dict:
-        """Fallback: variants ClinVar connus"""
-        return {
-            '17:7577548:C:T': {'clinical_significance': 'Pathogenic', 'review_status': 3, 'pathogenicity_score': 1.0},
-            '17:7577538:C:T': {'clinical_significance': 'Pathogenic', 'review_status': 3, 'pathogenicity_score': 1.0},
-            '13:32936732:C:T': {'clinical_significance': 'Pathogenic', 'review_status': 4, 'pathogenicity_score': 1.0},  # BRCA2
-        }
-
-
-class ConservationScorer:
-    """
-    Scores de conservation évolutive
-    Utilise GERP, PhyloP, PhastCons
-    """
-    
-    def __init__(self):
-        self.scores = {}
-        
-    def load_from_file(self, filepath: str, score_type: str = 'GERP') -> Dict:
-        """
-        Charge scores de conservation depuis fichier
-        Format: chr, pos, score
-        """
-        try:
-            df = pd.read_csv(filepath, sep='\t', low_memory=False)
-            print(f"✓ Conservation {score_type} chargé: {len(df)} positions")
-            
-            for _, row in df.iterrows():
-                chr_val = str(row.get('chr', '')).replace('chr', '')
-                pos = row.get('pos', 0)
-                key = f"{chr_val}:{pos}"
-                
-                self.scores[key] = float(row.get('score', 0))
-            
-            return self.scores
-            
-        except Exception as e:
-            print(f"Erreur chargement Conservation: {e}")
-            return self._load_default_conservation()
-    
-    def get_score(self, chr_val: str, pos: int) -> float:
-        """Récupère le score de conservation pour une position"""
-        key = f"{chr_val}:{pos}"
-        return self.scores.get(key, 0.0)
-    
-    def _load_default_conservation(self) -> Dict:
-        """Fallback: scores élevés pour positions connues"""
-        # Positions hautement conservées
-        default_scores = {}
-        
-        # TP53 DNA binding domain
-        for pos in range(7577100, 7577600):
-            default_scores[f"17:{pos}"] = 5.2
-        
-        # KRAS GTPase domain
-        for pos in range(25245300, 25245400):
-            default_scores[f"12:{pos}"] = 4.8
-        
-        return default_scores
-
-
-class ProteinDomainAnnotator:
-    """
-    Annotateur de domaines protéiques
-    Utilise InterPro, Pfam, SMART
-    """
-    
-    def __init__(self):
-        self.gene_domains = {}
-        
-    def load_from_file(self, filepath: str) -> Dict:
-        """
-        Charge domaines depuis fichier
-        Format: gene, domain_name, start_aa, end_aa, domain_type
-        """
-        try:
-            df = pd.read_csv(filepath, sep='\t', low_memory=False)
-            print(f"✓ Domaines protéiques chargés: {len(df)} domaines")
-            
-            for _, row in df.iterrows():
-                gene = row.get('gene', '')
-                if gene not in self.gene_domains:
-                    self.gene_domains[gene] = []
-                
-                self.gene_domains[gene].append({
-                    'name': row.get('domain_name', ''),
-                    'start': int(row.get('start_aa', 0)),
-                    'end': int(row.get('end_aa', 0)),
-                    'type': row.get('domain_type', ''),
-                    'importance': row.get('importance', 'medium')
-                })
-            
-            return self.gene_domains
-            
-        except Exception as e:
-            print(f"Erreur chargement Domaines: {e}")
-            return self._load_default_domains()
-    
-    def get_domain_at_position(self, gene: str, aa_pos: int) -> Optional[Dict]:
-        """Trouve le domaine à une position AA donnée"""
-        if gene not in self.gene_domains:
-            return None
-        
-        for domain in self.gene_domains[gene]:
-            if domain['start'] <= aa_pos <= domain['end']:
-                return domain
-        
-        return None
-    
-    def _load_default_domains(self) -> Dict:
-        """Fallback: domaines majeurs"""
-        return {
-            'TP53': [
-                {'name': 'Transactivation', 'start': 1, 'end': 61, 'type': 'functional', 'importance': 'high'},
-                {'name': 'DNA_binding', 'start': 102, 'end': 292, 'type': 'functional', 'importance': 'critical'},
-                {'name': 'Tetramerization', 'start': 324, 'end': 355, 'type': 'structural', 'importance': 'high'},
-            ],
-            'KRAS': [
-                {'name': 'GTPase', 'start': 1, 'end': 166, 'type': 'catalytic', 'importance': 'critical'},
-                {'name': 'Switch_I', 'start': 30, 'end': 38, 'type': 'functional', 'importance': 'critical'},
-                {'name': 'Switch_II', 'start': 60, 'end': 76, 'type': 'functional', 'importance': 'critical'},
-            ],
-            'PIK3CA': [
-                {'name': 'p85_binding', 'start': 1, 'end': 108, 'type': 'interaction', 'importance': 'medium'},
-                {'name': 'RAS_binding', 'start': 190, 'end': 292, 'type': 'interaction', 'importance': 'high'},
-                {'name': 'Helical', 'start': 533, 'end': 693, 'type': 'structural', 'importance': 'high'},
-                {'name': 'Kinase', 'start': 713, 'end': 1068, 'type': 'catalytic', 'importance': 'critical'},
-            ],
-            'BRAF': [
-                {'name': 'RAS_binding', 'start': 155, 'end': 227, 'type': 'interaction', 'importance': 'high'},
-                {'name': 'Kinase', 'start': 457, 'end': 717, 'type': 'catalytic', 'importance': 'critical'},
-            ],
-            'EGFR': [
-                {'name': 'Ligand_binding', 'start': 1, 'end': 621, 'type': 'interaction', 'importance': 'high'},
-                {'name': 'Transmembrane', 'start': 622, 'end': 644, 'type': 'structural', 'importance': 'medium'},
-                {'name': 'Kinase', 'start': 712, 'end': 979, 'type': 'catalytic', 'importance': 'critical'},
-            ],
-        }
+from ens_data_challenge.preprocess.molecular_extractor import (
+    COSMICDatabaseLoader,
+    ClinVarAnnotator,
+    ConservationScorer,
+    ProteinDomainAnnotator,
+    ProteinChangeParser
+)
 
 
 class MolecularFeatureExtractor:
@@ -207,31 +17,17 @@ class MolecularFeatureExtractor:
     Extracteur de features moléculaires enrichi
     """
     
-    def __init__(self, cosmic_loader: COSMICDatabaseLoader = None,
-                 clinvar_annotator: ClinVarAnnotator = None,
-                 conservation_scorer: ConservationScorer = None,
-                 domain_annotator: ProteinDomainAnnotator = None):
+    def __init__(self, cosmic_loader: COSMICDatabaseLoader,
+                 clinvar_annotator: ClinVarAnnotator,
+                 conservation_scorer: ConservationScorer,
+                 domain_annotator: ProteinDomainAnnotator,) -> None:
         
         # Bases de données
-        self.cosmic = cosmic_loader or COSMICDatabaseLoader()
-        self.clinvar = clinvar_annotator or ClinVarAnnotator()
-        self.conservation = conservation_scorer or ConservationScorer()
-        self.domains = domain_annotator or ProteinDomainAnnotator()
-        
-        # Charger données par défaut si non fournies
-        if not cosmic_loader:
-            self.cosmic.census_genes = self.cosmic._load_default_census()
-            self.cosmic.mutations = self.cosmic._load_default_hotspots()
-        
-        if not clinvar_annotator:
-            self.clinvar.variants = self.clinvar._load_default_clinvar()
-        
-        if not conservation_scorer:
-            self.conservation.scores = self.conservation._load_default_conservation()
-        
-        if not domain_annotator:
-            self.domains.gene_domains = self.domains._load_default_domains()
-        
+        self.cosmic = cosmic_loader
+        self.clinvar = clinvar_annotator
+        self.conservation = conservation_scorer
+        self.domains = domain_annotator
+
         # Longueurs chromosomes (hg38)
         self.chr_lengths = {
             '1': 248956422, '2': 242193529, '3': 198295559, '4': 190214555,
@@ -264,31 +60,31 @@ class MolecularFeatureExtractor:
         chr_str = str(chr_value).upper().replace('CHR', '').replace('_', '')
         return chr_str if chr_str in self.chr_lengths else None
     
-    def classify_mutation_type(self, ref: str, alt: str) -> Tuple[str, str]:
-        """Classifie le type de mutation"""
-        ref, alt = str(ref), str(alt)
-        len_ref, len_alt = len(ref), len(alt)
+    # def classify_mutation_type(self, ref: str, alt: str) -> Tuple[str, str]:
+    #     """Classifie le type de mutation"""
+    #     ref, alt = str(ref), str(alt)
+    #     len_ref, len_alt = len(ref), len(alt)
         
-        if len_ref == len_alt == 1:
-            transitions = [('A', 'G'), ('G', 'A'), ('C', 'T'), ('T', 'C')]
-            if (ref, alt) in transitions:
-                return 'SNV', 'transition'
-            else:
-                return 'SNV', 'transversion'
-        elif len_ref > len_alt:
-            diff = len_ref - len_alt
-            if diff % 3 == 0:
-                return 'deletion', 'inframe'
-            else:
-                return 'deletion', 'frameshift'
-        elif len_alt > len_ref:
-            diff = len_alt - len_ref
-            if diff % 3 == 0:
-                return 'insertion', 'inframe'
-            else:
-                return 'insertion', 'frameshift'
-        else:
-            return 'complex', 'unknown'
+    #     if len_ref == len_alt == 1:
+    #         transitions = [('A', 'G'), ('G', 'A'), ('C', 'T'), ('T', 'C')]
+    #         if (ref, alt) in transitions:
+    #             return 'SNV', 'transition'
+    #         else:
+    #             return 'SNV', 'transversion'
+    #     elif len_ref > len_alt:
+    #         diff = len_ref - len_alt
+    #         if diff % 3 == 0:
+    #             return 'deletion', 'inframe'
+    #         else:
+    #             return 'deletion', 'frameshift'
+    #     elif len_alt > len_ref:
+    #         diff = len_alt - len_ref
+    #         if diff % 3 == 0:
+    #             return 'insertion', 'inframe'
+    #         else:
+    #             return 'insertion', 'frameshift'
+    #     else:
+    #         return 'complex', 'unknown'
     
     def extract_cosmic_features(self, chr_str: str, start: int, ref: str, alt: str, gene: str) -> Dict:
         """Features COSMIC enrichies"""
@@ -783,125 +579,4 @@ class MolecularFeatureExtractor:
         
         features_df = pd.DataFrame(all_features)
         
-        print(f"\n{'='*60}")
-        print(f"✓ EXTRACTION TERMINÉE")
-        print(f"{'='*60}")
-        print(f"Mutations traitées: {len(features_df)}")
-        print(f"Features générées: {len(features_df.columns)}")
-        print(f"\nCatégories de features:")
-        print(f"  - COSMIC: {sum(1 for c in features_df.columns if 'cosmic' in c)}")
-        print(f"  - ClinVar: {sum(1 for c in features_df.columns if 'clinvar' in c)}")
-        print(f"  - Conservation: {sum(1 for c in features_df.columns if 'conservation' in c)}")
-        print(f"  - Domaines: {sum(1 for c in features_df.columns if 'domain' in c)}")
-        print(f"  - Signatures: {sum(1 for c in features_df.columns if 'sig_' in c)}")
-        print(f"  - Structurelles: {sum(1 for c in features_df.columns if any(x in c for x in ['length', 'gc', 'complexity']))}")
-        
         return features_df
-    
-    def aggregate_patient_features(self, features_df: pd.DataFrame, patient_col: str = 'patient_id') -> pd.DataFrame:
-        """Agrège features au niveau patient"""
-        
-        if patient_col not in features_df.columns:
-            print(f"Warning: Colonne {patient_col} non trouvée")
-            return features_df
-        
-        print(f"\n{'='*60}")
-        print(f"AGRÉGATION AU NIVEAU PATIENT")
-        print(f"{'='*60}")
-        
-        agg_features = []
-        
-        for patient, group in features_df.groupby(patient_col):
-            feat = {'patient_id': patient}
-            
-            # Comptages basiques
-            feat['total_mutations'] = len(group)
-            feat['n_unique_genes'] = group['gene'].nunique()
-            feat['n_unique_chromosomes'] = group['chr'].nunique()
-            
-            # Distribution types de mutations
-            for mtype in ['SNV', 'insertion', 'deletion']:
-                n = (group['mutation_type'] == mtype).sum()
-                feat[f'n_{mtype}'] = n
-                feat[f'ratio_{mtype}'] = n / len(group)
-            
-            for subtype in ['transition', 'transversion', 'frameshift', 'inframe']:
-                n = (group['mutation_subtype'] == subtype).sum()
-                feat[f'n_{subtype}'] = n
-                feat[f'ratio_{subtype}'] = n / len(group) if len(group) > 0 else 0
-            
-            # Features COSMIC agrégées
-            feat['n_cosmic_hotspots'] = group['is_cosmic_hotspot'].sum()
-            feat['ratio_cosmic_hotspots'] = group['is_cosmic_hotspot'].mean()
-            feat['mean_cosmic_count'] = group['cosmic_exact_count'].mean()
-            feat['max_cosmic_count'] = group['cosmic_exact_count'].max()
-            feat['sum_cosmic_log_count'] = group['cosmic_log_count'].sum()
-            feat['mean_driver_ratio'] = group['cosmic_driver_ratio'].mean()
-            feat['weighted_driver_score'] = (group['cosmic_driver_ratio'] * group['cosmic_exact_count']).sum() / max(group['cosmic_exact_count'].sum(), 1)
-            
-            # Gènes cancer
-            feat['n_census_genes'] = group['gene_is_census'].sum()
-            feat['n_oncogenes'] = group['gene_is_oncogene'].sum()
-            feat['n_tsg'] = group['gene_is_tsg'].sum()
-            feat['n_tier1_genes'] = (group['gene_tier'] == 1).sum()
-            feat['ratio_census_genes'] = group['gene_is_census'].mean()
-            
-            # Conservation
-            feat['mean_conservation'] = group['conservation_gerp'].mean()
-            feat['n_highly_conserved'] = group['is_highly_conserved'].sum()
-            feat['max_conservation'] = group['conservation_gerp'].max()
-            
-            # Domaines protéiques
-            feat['n_in_domains'] = group['in_protein_domain'].sum()
-            feat['n_in_catalytic'] = group['in_catalytic_domain'].sum()
-            feat['mean_domain_importance'] = group['domain_importance_score'].mean()
-            
-            # Impact fonctionnel
-            feat['n_lof'] = group['is_lof'].sum()
-            feat['n_missense'] = group['is_missense'].sum()
-            feat['ratio_lof'] = group['is_lof'].mean()
-            feat['mean_impact_score'] = group['predicted_impact_score'].mean()
-            feat['max_impact_score'] = group['predicted_impact_score'].max()
-            
-            # Signatures mutationnelles
-            for sig in ['sig_aging_cpg', 'sig_oxidative', 'sig_mmr_indel', 'sig_smoking', 'sig_apobec', 'sig_uv_like']:
-                if sig in group.columns:
-                    feat[f'{sig}_count'] = group[sig].sum()
-                    feat[f'{sig}_ratio'] = group[sig].mean()
-            
-            # ClinVar
-            feat['n_in_clinvar'] = group['in_clinvar'].sum()
-            feat['mean_clinvar_pathogenicity'] = group['clinvar_pathogenicity'].mean()
-            
-            # Clustering / contexte
-            if 'is_clustered' in group.columns:
-                feat['n_clustered_mutations'] = group['is_clustered'].sum()
-                feat['mean_mutation_density'] = group['mutation_density_local'].mean()
-                feat['max_mutations_100kb'] = group['n_mutations_100kb'].max()
-            
-            # Score composite
-            feat['mean_driver_score'] = group['composite_driver_score'].mean()
-            feat['max_driver_score'] = group['composite_driver_score'].max()
-            feat['sum_driver_score'] = group['composite_driver_score'].sum()
-            
-            # Distribution chromosomique
-            chr_dist = group['chr'].value_counts()
-            feat['max_mutations_single_chr'] = chr_dist.max()
-            feat['entropy_chr_distribution'] = -sum((chr_dist / len(group)) * np.log2(chr_dist / len(group)))
-            
-            # Complexité
-            feat['mean_ref_length'] = group['ref_length'].mean()
-            feat['mean_alt_length'] = group['alt_length'].mean()
-            feat['mean_length_diff'] = group['length_diff_abs'].mean()
-            feat['n_large_variants'] = group['is_large_variant'].sum()
-            
-            agg_features.append(feat)
-        
-        agg_df = pd.DataFrame(agg_features)
-        
-        print(f"✓ Agrégation terminée")
-        print(f"  Patients: {len(agg_df)}")
-        print(f"  Features: {len(agg_df.columns)}")
-        print(f"{'='*60}\n")
-        
-        return agg_df

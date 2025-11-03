@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List
 
 from ens_data_challenge.feature_engineering.feature_engineering import FeatureEngineering
-from ens_data_challenge.gloabls import (
+from ens_data_challenge.globals import (
     TRAIN_CLINICAL_DATA_PATH,
     TEST_CLINICAL_DATA_PATH,
     TRAIN_MOLECULAR_DATA_PATH,

@@ -13,3 +13,9 @@ wheels/
 .venv
 data/
 **csv
+**.png
+
+**.yaml
+**.yml
+logs/
+lightning_logs/

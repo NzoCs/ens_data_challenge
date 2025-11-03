@@ -2,8 +2,7 @@ import logging
 import re
 import math  # Importation de math au lieu de numpy
 import pandas as pd
-from typing import List, Optional, DefaultDict, TypedDict, Tuple
-from enum import StrEnum
+from typing import List, Optional, Tuple
 
 from .parser import ParsedKaryotype, CytogeneticsParser
 
@@ -11,7 +10,7 @@ from .parser import ParsedKaryotype, CytogeneticsParser
 # FEATURE ENGINEERING - Séparé du parsing
 # =================================================================
 
-class CytogeneticsFeatureExtractor:
+class CytogeneticsExtractor:
     """Extrait des features prédictives à partir d'un karyotype parsé"""
     
     def __init__(self):
@@ -44,15 +43,10 @@ class CytogeneticsFeatureExtractor:
         """Features pour données manquantes"""
         return {
             'is_normal': None,
-            'ploidy': None,
             'has_tp53_deletion': None,
             'has_complex_chr3': None,
             'n_abnormalities': None,
             'n_chromosomes_affected': None,
-            'has_monosomy_7': None,
-            'has_del_5q': None,
-            'has_del_7q': None,
-            'has_monosomy_y': None,
             'n_deletions': None,
             'n_critical_regions_deleted': None,
             'has_large_deletion': None,
@@ -61,26 +55,20 @@ class CytogeneticsFeatureExtractor:
             'abnormal_clone_percentage': None,
             # Nouveaux scores de risque
             'computed_risk_score': None,
-            'mds_ipss_r_cyto_risk': 'Unknown',
-            'mds_ipss_cyto_risk': 'Unknown',
-            'aml_eln_2022_cyto_risk': 'Unknown',
-            'cll_cyto_risk': 'Unknown',
-            'mm_riss_cyto_risk': 'Unknown'
+            'mds_ipss_r_cyto_risk': 'unknown',
+            'aml_eln_2022_cyto_risk': 'unknown',
+            'cll_cyto_risk': 'unknown',
+            'mm_riss_cyto_risk': 'unknown'
         }
     
     def _normal_features(self, parsed: ParsedKaryotype) -> dict:
         """Features pour caryotype normal"""
         return {
             'is_normal': True,
-            'ploidy': parsed.ploidy,
             'has_tp53_deletion': False,
             'has_complex_chr3': False,
             'n_abnormalities': 0,
             'n_chromosomes_affected': 0,
-            'has_monosomy_7': False,
-            'has_del_5q': False,
-            'has_del_7q': False,
-            'has_monosomy_y': False,
             'n_deletions': 0,
             'n_critical_regions_deleted': 0,
             'has_large_deletion': False,
@@ -89,11 +77,10 @@ class CytogeneticsFeatureExtractor:
             'abnormal_clone_percentage': 0.0,
             # Nouveaux scores de risque (catégories favorables)
             'computed_risk_score': 0.0,
-            'mds_ipss_r_cyto_risk': 'Good',
-            'mds_ipss_cyto_risk': 'Good',
-            'aml_eln_2022_cyto_risk': 'Intermediate', # Normal est intermédiaire pour ELN
-            'cll_cyto_risk': 'Very Low',
-            'mm_riss_cyto_risk': 'Standard'
+            'mds_ipss_r_cyto_risk': 'low',  # Good -> low
+            'aml_eln_2022_cyto_risk': 'intermediate',  # Normal est intermédiaire pour ELN
+            'cll_cyto_risk': 'very low',
+            'mm_riss_cyto_risk': 'intermediate'  # Standard -> intermediate
         }
     
     def _single_clone_features(self, parsed: ParsedKaryotype) -> dict:
@@ -102,15 +89,10 @@ class CytogeneticsFeatureExtractor:
         # Calcul des features de base
         feats = {
             'is_normal': False,
-            'ploidy': parsed.ploidy,
             'has_tp53_deletion': self._has_tp53_deletion(parsed),
             'has_complex_chr3': self._has_complex_chr3(parsed),
             'n_abnormalities': self._count_abnormalities(parsed),
             'n_chromosomes_affected': self._count_affected_chromosomes(parsed),
-            'has_monosomy_7': ('7' in parsed.monosomies),
-            'has_del_5q': self._has_del_5q(parsed),
-            'has_del_7q': self._has_del_7q(parsed),
-            'has_monosomy_y': ('y' in parsed.monosomies),
             'n_deletions': len(parsed.deletions),
             'n_critical_regions_deleted': self._count_critical_deletions(parsed),
             'has_large_deletion': self._has_large_deletion(parsed),
@@ -121,7 +103,6 @@ class CytogeneticsFeatureExtractor:
         
         # Calcul des scores de risque basés sur les features
         feats['mds_ipss_r_cyto_risk'] = self._get_mds_ipss_r_cytogenetic_risk(parsed, feats)
-        feats['mds_ipss_cyto_risk'] = self._get_mds_ipss_cytogenetic_risk(parsed, feats)
         feats['aml_eln_2022_cyto_risk'] = self._get_aml_eln_2022_cytogenetic_risk(parsed, feats)
         feats['cll_cyto_risk'] = self._get_cll_hierarchical_risk(parsed, feats)
         feats['mm_riss_cyto_risk'] = self._get_mm_riss_cytogenetic_risk(parsed, feats)
@@ -261,6 +242,10 @@ class CytogeneticsFeatureExtractor:
         """Détecte si une trisomie est présente dans la liste"""
         return any(tri in chromosomes for tri in parsed.trisomies)
 
+    def _has_monosomy(self, parsed: ParsedKaryotype, chromosome: str) -> bool:
+        """Détecte si une monosomie pour un chromosome donné est présente"""
+        return str(chromosome) in set(str(m) for m in parsed.monosomies)
+
     def _has_translocation(self, parsed: ParsedKaryotype, chr_pairs: List[tuple[str, str]]) -> int:
         """Détecte une translocation dans une liste de paires"""
         for trans in parsed.translocations:
@@ -383,116 +368,95 @@ class CytogeneticsFeatureExtractor:
     # === NOUVELLES FONCTIONS DE SCORING ===
 
     def _get_mds_ipss_r_cytogenetic_risk(self, parsed: ParsedKaryotype, feats: dict) -> str:
-        """Classification cytogénétique IPSS-R (MDS)"""
+        """Classification cytogénétique IPSS-R (MDS) - standardisée"""
         n_abn = feats['n_abnormalities']
         
-        # Very Poor
+        # Very High
         if n_abn > 3 or feats['has_tp53_deletion']:
-            return 'Very Poor'
+            return 'very high'
         
-        # Poor
-        if feats['has_monosomy_7'] or feats['has_del_7q'] or feats['has_complex_chr3'] or n_abn == 3:
-            return 'Poor'
+        # High
+        if self._has_monosomy(parsed, '7') or self._has_del_7q(parsed) or feats['has_complex_chr3'] or n_abn == 3:
+            return 'high'
         
-        # Very Good
+        # Very Low
         has_del_11q = self._has_del_11q(parsed)
-        if n_abn == 1 and (feats['has_monosomy_y'] or has_del_11q):
-            return 'Very Good'
+        if n_abn == 1 and (self._has_monosomy(parsed, 'y') or has_del_11q):
+            return 'very low'
         
-        # Good
+        # Low
         has_del_12p = any(d.get('chromosome') == '12' and d.get('arm') == 'p' for d in parsed.deletions)
         has_del_20q = any(d.get('chromosome') == '20' and d.get('arm') == 'q' for d in parsed.deletions)
         
         if n_abn == 0:
-            return 'Good' 
-        if n_abn == 1 and (feats['has_del_5q'] or has_del_12p or has_del_20q):
-            return 'Good'
-        if n_abn == 2 and feats['has_del_5q']: # Double incluant del(5q)
-            return 'Good'
+            return 'low' 
+        if n_abn == 1 and (self._has_del_5q(parsed) or has_del_12p or has_del_20q):
+            return 'low'
+        if n_abn == 2 and self._has_del_5q(parsed): # Double incluant del(5q)
+            return 'low'
         
         # Intermediate
-        # (inclut +8 seule, del(7q) seule [déjà 'Poor' ?], +19 seule, i(17q), autres)
-        # La logique IPSS-R est complexe, 'Poor' prime sur 'Intermediate'
-        return 'Intermediate'
-
-    def _get_mds_ipss_cytogenetic_risk(self, parsed: ParsedKaryotype, feats: dict) -> str:
-        """Classification cytogénétique IPSS (MDS)"""
-        n_abn = feats['n_abnormalities']
-        
-        # Poor
-        if n_abn >= 3 or feats['has_monosomy_7'] or feats['has_del_7q']:
-            return 'Poor'
-        
-        # Good
-        has_del_20q = any(d.get('chromosome') == '20' and d.get('arm') == 'q' for d in parsed.deletions)
-        
-        if n_abn == 0: # Normal
-            return 'Good'
-        if n_abn == 1 and (feats['has_monosomy_y'] or feats['has_del_5q'] or has_del_20q):
-            return 'Good'
-        
-        # Intermediate
-        return 'Intermediate'
+        return 'intermediate'
 
     def _get_aml_eln_2022_cytogenetic_risk(self, parsed: ParsedKaryotype, feats: dict) -> str:
-        """Classification cytogénétique ELN 2022 (AML)"""
+        """Classification cytogénétique ELN 2022 (AML) - standardisée"""
         n_abn = feats['n_abnormalities']
         
-        # Favorable
+        # Very Low (Favorable)
         if self._has_translocation(parsed, [('8', '21'), ('16', '16'), ('15', '17')]):
-            return 'Favorable'
+            return 'very low'
         if any(inv.get('chromosome') == '16' for inv in parsed.inversions):
-            return 'Favorable'
+            return 'very low'
 
-        # Adverse
+        # Very High (Adverse)
         if self._has_translocation(parsed, [('3', '3'), ('6', '9'), ('9', '22')]):
-            return 'Adverse'
+            return 'very high'
         if any(inv.get('chromosome') == '3' for inv in parsed.inversions):
-            return 'Adverse'
-        if '5' in parsed.monosomies or feats['has_del_5q']:
-            return 'Adverse'
+            return 'very high'
+        if '5' in parsed.monosomies or self._has_del_5q(parsed):
+            return 'very high'
         if '7' in parsed.monosomies: # -7 (pas del(7q) pour ELN)
-            return 'Adverse'
+            return 'very high'
         if '17' in parsed.monosomies or feats['has_tp53_deletion']:
-            return 'Adverse'
+            return 'very high'
         if n_abn >= 3: # Complex karyotype
-            return 'Adverse'
+            return 'very high'
             
         # Intermediate
-        return 'Intermediate'
+        return 'intermediate'
         
     def _get_cll_hierarchical_risk(self, parsed: ParsedKaryotype, feats: dict) -> str:
-        """Classification cytogénétique hiérarchique (CLL)"""
+        """Classification cytogénétique hiérarchique (CLL) - standardisée"""
         
         if feats['has_tp53_deletion']:
-            return 'Very High'
+            return 'very high'
         
         if self._has_del_11q(parsed):
-            return 'High'
+            return 'high'
         
         if '12' in parsed.trisomies:
-            return 'Intermediate'
+            return 'intermediate'
         
         n_abn = feats['n_abnormalities']
         if self._has_del_13q(parsed) and n_abn == 1:
-            return 'Low'
+            return 'low'
         
         if n_abn == 0:
-            return 'Very Low'
+            return 'very low'
         
-        return 'Intermediate' # Fallback pour autres anomalies
+        return 'intermediate' # Fallback pour autres anomalies
 
     def _get_mm_riss_cytogenetic_risk(self, parsed: ParsedKaryotype, feats: dict) -> str:
-        """Classification cytogénétique R-ISS (Multiple Myeloma)"""
+        """Classification cytogénétique R-ISS (Multiple Myeloma) - standardisée"""
         
-        # High Risk
+        # High
         if feats['has_tp53_deletion']:
-            return 'High'
+            return 'high'
         if self._has_translocation(parsed, [('4', '14'), ('14', '16')]):
-            return 'High'
+            return 'high'
             
-        # Standard Risk
-        return 'Standard'
+        # Intermediate (Standard)
+        return 'intermediate'
 
     # === Fin des nouvelles fonctions ===
 
@@ -528,38 +492,207 @@ class CytogeneticsFeatureExtractor:
         Calcule un score de risque numérique basé sur les anomalies détectées.
         Score normalisé entre 0 (bon pronostic) et 1 (très mauvais pronostic).
         """
-        weights = {
-            'has_tp53_deletion': 3.0,
-            'has_complex_chr3': 2.0,
-            'has_del_5q': 1.0, # Moins d'impact que -7
-            'has_del_7q': 1.5,
-            'has_monosomy_7': 2.5,
-            'n_abnormalities': 0.3,
-            'n_critical_regions_deleted': 1.0,
-            'has_large_deletion': 1.0,
-        }
-        
-        # calcul pondéré
+        # Poids manuels — évaluer depuis `parsed` pour éviter dépendance aux flags exposés
         raw_score = 0.0
-        for feat, w in weights.items():
-            value = feats.get(feat)
-            if value is not None:
-                raw_score += w * float(value)
-        
+        # TP53
+        if feats.get('has_tp53_deletion'):
+            raw_score += 3.0
+        # complex chr3
+        if feats.get('has_complex_chr3'):
+            raw_score += 2.0
+        # del(5q) / del(7q)
+        if self._has_del_5q(parsed):
+            raw_score += 1.0
+        if self._has_del_7q(parsed):
+            raw_score += 1.5
+        # monosomy 7
+        if self._has_monosomy(parsed, '7'):
+            raw_score += 2.5
+        # n_abnormalities / n_critical
+        if feats.get('n_abnormalities') is not None:
+            raw_score += 0.3 * float(feats.get('n_abnormalities'))
+        if feats.get('n_critical_regions_deleted') is not None:
+            raw_score += 1.0 * float(feats.get('n_critical_regions_deleted'))
+        # large deletion
+        if feats.get('has_large_deletion'):
+            raw_score += 1.0
+
         # Pénalité pour -Y (bon pronostic)
-        if feats.get('has_monosomy_y') == 1 and feats.get('n_abnormalities') == 1:
-             raw_score = -2.0 # Force un score bas
+        if self._has_monosomy(parsed, 'y') and feats.get('n_abnormalities') == 1:
+            raw_score = -2.0 # Force un score bas
 
         # normalisation (sigmoïde)
         normalized = 1 / (1 + math.exp(-0.4 * (raw_score - 4))) # Utilisation de math.exp
         return round(float(normalized), 3)
+    
+    def gen_structured_dataframe(
+        self,
+        df: pd.DataFrame,
+        cyto_col: str = 'CYTOGENETICS',
+    ) -> Tuple[pd.DataFrame, List[str]]:
+
+        parser = CytogeneticsParser()
+        rows: list[dict] = []
+
+        # colonnes fixes pour toutes les mutations
+        base_cols = [
+            'ID', 'ploidy', 'sex_chromosomes', 'clone_index', 'clone_cell_count',
+            'mutation_type', 'chromosome', 'arm', 'start', 'end', 'start_arm', 'end_arm', 'raw'
+        ]
+
+        for idx, row in df.iterrows():
+            patient_id = row['ID']
+            cyto = row[cyto_col]
+            parsed_list = parser.parse(cyto)
+            if not parsed_list:
+                continue
+
+            ploidy = parsed_list[0].ploidy
+            sex_chrom = parsed_list[0].sex_chromosomes
+
+            for clone_i, clone in enumerate(parsed_list):
+                base = {
+                    'ID': patient_id,
+                    'ploidy': ploidy,
+                    'sex_chromosomes': sex_chrom,
+                    'clone_index': clone_i,
+                    'clone_cell_count': clone.cell_count or 0
+                }
+
+                def make_row(extra: dict, mut_type: str):
+                    row = base.copy()
+                    for col in base_cols:
+                        if col not in row:
+                            row[col] = None
+                    row.update(extra)
+                    row['mutation_type'] = mut_type
+                    return row
+
+                # deletions
+                for d in clone.deletions:
+                    rows.append(make_row({
+                        'chromosome': d.get('chromosome'),
+                        'arm': d.get('arm'),
+                        'start': d.get('start'),
+                        'end': d.get('end'),
+                        'start_arm': d.get('start_arm'),
+                        'end_arm': d.get('end_arm'),
+                        'raw': d
+                    }, 'deletion'))
+
+                # additions
+                for a in clone.additions:
+                    rows.append(make_row({
+                        'chromosome': a.get('chromosome'),
+                        'arm': a.get('arm'),
+                        'start': a.get('start'),
+                        'end': a.get('end'),
+                        'start_arm': a.get('start_arm'),
+                        'end_arm': a.get('end_arm'),
+                        'raw': a
+                    }, 'addition'))
+
+                # inversions
+                for inv in clone.inversions:
+                    rows.append(make_row({
+                        'chromosome': inv.get('chromosome'),
+                        'arm': inv.get('arm'),
+                        'start': inv.get('start'),
+                        'end': inv.get('end'),
+                        'start_arm': inv.get('start_arm'),
+                        'end_arm': inv.get('end_arm'),
+                        'raw': inv
+                    }, 'inversion'))
+
+                # derivatives
+                for der in clone.derivatives:
+                    rows.append(make_row({
+                        'chromosome': der.get('chromosome') or der.get('derivative'),
+                        'raw': der
+                    }, 'derivative'))
+
+                # triplications / duplications / isochromosomes / markers
+                for dup in clone.duplications:
+                    rows.append(make_row({
+                        'chromosome': dup.get('chromosome'),
+                        'arm': dup.get('arm'),
+                        'start': dup.get('start'),
+                        'end': dup.get('end'),
+                        'start_arm': dup.get('start_arm'),
+                        'end_arm': dup.get('end_arm'),
+                        'raw': dup
+                    }, 'duplication'))
+
+                for _ in range(len(clone.triplications)):
+                    rows.append(make_row({'raw': None}, 'triplication'))
+
+                for iso in clone.isochromosomes:
+                    rows.append(make_row({
+                        'chromosome': iso.get('chromosome'),
+                        'arm': iso.get('arm'),
+                        'start_arm': iso.get('start_arm'),
+                        'end_arm': iso.get('end_arm'),
+                        'raw': iso
+                    }, 'isochromosome'))
+
+                for m in clone.markers:
+                    rows.append(make_row({'raw': m}, 'marker'))
+
+                # trisomies
+                for tri in clone.trisomies:
+                    rows.append(make_row({
+                        'chromosome': tri,
+                        'raw': tri
+                    }, 'trisomy'))
+
+                # monosomies
+                for mono in clone.monosomies:
+                    rows.append(make_row({
+                        'chromosome': mono,
+                        'raw': mono
+                    }, 'monosomy'))
+
+                # translocations → on stocke chr1, chr2 dans chromosome séparé par une virgule, breakpoints dans arm/start/end optionnel
+                for t in clone.translocations:
+                    chr1 = chr2 = None
+                    start_arm = end_arm = None
+                    if t.get('chromosomes'):
+                        chrs = t.get('chromosomes')
+                        if isinstance(chrs, (list, tuple)) and len(chrs) >= 2:
+                            chr1, chr2 = chrs[0], chrs[1]
+                    elif t.get('chromosome'):
+                        chrs = re.findall(r'(\d+|x|y)', str(t.get('chromosome')).lower())
+                        if len(chrs) >= 2:
+                            chr1, chr2 = chrs[0], chrs[1]
+
+                    # Extract arms from breakpoints if available
+                    bps = t.get('breakpoints')
+                    if bps and isinstance(bps, (list, tuple)) and len(bps) >= 2:
+                        if isinstance(bps[0], (list, tuple)) and len(bps[0]) >= 1:
+                            start_arm = bps[0][0]
+                        if isinstance(bps[1], (list, tuple)) and len(bps[1]) >= 1:
+                            end_arm = bps[1][0]
+
+                    rows.append(make_row({
+                        'chromosome': f"{chr1},{chr2}" if chr1 and chr2 else None,
+                        'arm': None,
+                        'start': None,
+                        'end': None,
+                        'start_arm': start_arm,
+                        'end_arm': end_arm,
+                        'raw': t
+                    }, 'translocation'))
+
+        struct_df = pd.DataFrame(rows)
+        struct_df = struct_df[base_cols]  # assure l'ordre des colonnes
+        return struct_df, base_cols
 
     def gen_features_to_dataframe(
         self,
         df: pd.DataFrame,
         cyto_col: str = 'CYTOGENETICS',
     ) -> Tuple[pd.DataFrame, List[str]]:
-        """Ajoute les colonnes de features au DataFrame à partir de la colonne cytogénétique.
+        """
 
         Args:
             df: DataFrame source contenant une colonne avec les caryotypes ISCN.

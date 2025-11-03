@@ -3,14 +3,16 @@ import pandas as pd
 from typing import cast, List
 
 
-from ens_data_challenge.feature_engineering.cytogenetic_parser.parser import (
+from ens_data_challenge.preprocess.cytogenetic_parser.parser import (
     CytogeneticsParser,
     CytogeneticsPatterns,
 )
-from ens_data_challenge.feature_engineering.cytogenetic_parser.types import (
+from ens_data_challenge.preprocess.cytogenetic_parser.types import (
     ParsedKaryotypeDict,
 )
-from ens_data_challenge.gloabls import TRAIN_CLINICAL_DATA_PATH, TEST_CLINICAL_DATA_PATH
+from ens_data_challenge.preprocess.cytogenetic_parser.parser import ParsedKaryotype
+from ens_data_challenge.preprocess.cytogenetic_parser.parser import ParsedKaryotype
+from ens_data_challenge.globals import TRAIN_CLINICAL_DATA_PATH, TEST_CLINICAL_DATA_PATH
 
 
 @pytest.fixture
@@ -243,7 +245,6 @@ def test_parse_clinical_train_cytogenetics(parser: CytogeneticsParser, clinical_
     or a list of ParsedKaryotype objects for every row.
     """
     # Import here to avoid unused import at module top
-    from ens_data_challenge.feature_engineering.cytogenetic_parser.parser import ParsedKaryotype
 
     assert 'CYTOGENETICS' in clinical_data_train.columns
 
@@ -281,7 +282,6 @@ def test_parse_clinical_test_cytogenetics(parser: CytogeneticsParser, clinical_d
     or a list of ParsedKaryotype objects for every row.
     """
     # Import here to avoid unused import at module top
-    from ens_data_challenge.feature_engineering.cytogenetic_parser.parser import ParsedKaryotype
 
     assert 'CYTOGENETICS' in clinical_data_test.columns
 

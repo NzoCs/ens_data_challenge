@@ -10,6 +10,7 @@ from ens_data_challenge.types import Columns, CytoColumns, MolecularColumns, Cyt
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
+from sklearn.preprocessing import StandardScaler
 
 def surv_collate_fn(batch):
     """
@@ -106,11 +107,11 @@ class SurvDataModule(pl.LightningDataModule):
             data_type='clinical'
         )
 
-        fe.add_mol_encoding(
-            col='GENE',
-            method='vaf_score',
-            apply_effect_weighting=False
-        )
+        # fe.add_mol_encoding(
+        #     col='GENE',
+        #     method='vaf_score',
+        #     apply_effect_weighting=False
+        # )
 
         fe.add_mol_encoding(
             col='PATHWAY',
@@ -118,11 +119,11 @@ class SurvDataModule(pl.LightningDataModule):
             apply_effect_weighting=False
         )
 
-        fe.add_mol_encoding(
-            col='EFFECT',
-            method='constant',
-            apply_effect_weighting=False
-        )
+        # fe.add_mol_encoding(
+        #     col='EFFECT',
+        #     method='constant',
+        #     apply_effect_weighting=False
+        # )
 
         fe.encode_risk(
             categorical_cols=[
@@ -160,6 +161,8 @@ class SurvDataModule(pl.LightningDataModule):
         molecular_train_processed, molecular_val_processed = fe.get_molecular_data()
         cytogenetic_train_processed, cytogenetic_val_processed = fe.get_cytogenetic_data()
 
+
+    
         
         # Trier par ID pour aligner les données
         clinical_train_processed = clinical_train_processed.sort_values('ID').reset_index(drop=True)
@@ -172,7 +175,32 @@ class SurvDataModule(pl.LightningDataModule):
         cytogenetic_val_processed = cytogenetic_val_processed.sort_values('ID').reset_index(drop=True)
         val_targets_clean = val_targets_clean.sort_values('ID').reset_index(drop=True)
 
+        molecular_train_processed.drop(columns=["START", "END", "DEPTH", ], inplace=True)
+        molecular_val_processed.drop(columns=["START", "END", "DEPTH", ], inplace=True)
 
+        print(f"Final clinical features: {clinical_train_processed.columns.tolist()}")
+        print(f"Final molecular features: {molecular_train_processed.columns.tolist()}")
+        print(f"Final cytogenetic features: {cytogenetic_train_processed.columns.tolist()}")
+
+        # Standard scaling
+        clinical_scaler = StandardScaler()
+        clinical_train_processed.iloc[:, :-1] = clinical_scaler.fit_transform(clinical_train_processed.iloc[:, :-1])  # skip ID
+        clinical_val_processed.iloc[:, :-1] = clinical_scaler.transform(clinical_val_processed.iloc[:, :-1])
+
+        mol_scaler = StandardScaler()
+        molecular_train_processed.iloc[:, :-1] = mol_scaler.fit_transform(molecular_train_processed.iloc[:, :-1])  # skip ID
+        molecular_val_processed.iloc[:, :-1] = mol_scaler.transform(molecular_val_processed.iloc[:, :-1])
+
+        cyto_scaler = StandardScaler()
+        cytogenetic_train_processed.iloc[:, :-1] = cyto_scaler.fit_transform(cytogenetic_train_processed.iloc[:, :-1])  # skip ID
+        cytogenetic_val_processed.iloc[:, :-1] = cyto_scaler.transform(cytogenetic_val_processed.iloc[:, :-1])
+
+        if clinical_train_processed.isna().any().any():
+            print("NaN detected in clinical training data")
+        
+        clinical_train_processed.fillna(0.0, inplace=True)
+        clinical_val_processed.fillna(0.0, inplace=True)
+            
         self.train_dataset = CustomSurvDataset(
             molecularData=molecular_train_processed, 
             clinicalData=clinical_train_processed, 

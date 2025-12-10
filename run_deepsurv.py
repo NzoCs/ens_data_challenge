@@ -48,14 +48,21 @@ def main():
         batch_size=32
     )
 
+    # Setup to get dimensions
+    dm.setup()
+
+    # Calculate input dimension
+    clinical_dim = dm.train_dataset.clinicalData.shape[1]
+    input_dim = 4 + 4 + clinical_dim - 1  # mol_embed_dim + cyto_embed_dim + clinical_dim
+
     # Model
     model = DeepSurv(
-        model=DefaultMLP(hidden_layers=[16, 8, 4]),
+        model=DefaultMLP(input_dim=input_dim, hidden_layers=[16, 8, 4]),
         mol_embed_dim=4,
         mol_hidden_dim=4,
         cyto_embed_dim=4,
         cyto_hidden_dim=4,
-        loss_type="smooth_cindex",
+        loss_type="cox",
         lr=1e-3,
         weight_decay=1e-5
     )

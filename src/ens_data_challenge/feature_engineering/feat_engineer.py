@@ -89,16 +89,19 @@ class FeatureEngineer2:
         """
         # Select the appropriate dataframe
         if data_type == "clinical":
-            df = self.clinical_train
+            df_train = self.clinical_train
+            df_test = self.clinical_test
         elif data_type == "molecular":
-            df = self.molecular_train
+            df_train = self.molecular_train
+            df_test = self.molecular_test
         elif data_type == "cytogenetic":
-            df = self.cytogenetic_train
+            df_train = self.cytogenetic_train
+            df_test = self.cytogenetic_test
         else:
             raise ValueError(f"Invalid data_type: {data_type}")
 
         # Validate input columns
-        missing_cols = [c for c in categorical_cols if c not in df.columns]
+        missing_cols = [c for c in categorical_cols if c not in df_train.columns]
         if missing_cols:
             raise KeyError(f"Columns missing from {data_type}_train: {missing_cols}")
 
@@ -111,7 +114,8 @@ class FeatureEngineer2:
             "very high": 4
         }
         for col in categorical_cols:
-            df[col] = df[col].map(risk_mapping)
+            df_train[col] = df_train[col].map(risk_mapping)
+            df_test[col] = df_test[col].map(risk_mapping)
 
         return categorical_cols
 

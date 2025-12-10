@@ -21,10 +21,8 @@ class DeepSurv(pl.LightningModule):
             cyto_hidden_dim: int,
             loss_type: Literal["cox", "smooth_cindex"] = "cox",
             smooth_margin: float = 0.1,
-            regularization: float = 0.0,
-            l2_ratio: float = 1.0,
-            lr: float = 1e-3, 
-            weight_decay: float = 1e-5
+            lr: float = 1e-2,
+            weight_decay: float = 1e-2
             ):
         
         super().__init__()
@@ -46,8 +44,19 @@ class DeepSurv(pl.LightningModule):
         self.weight_decay = weight_decay
         self.loss_type = loss_type
         self.smooth_margin = smooth_margin
-        self.regularization = regularization
-        self.l2_ratio = l2_ratio
+    
+    @staticmethod
+    def soft_threshold(x, lam):
+        return torch.sign(x) * torch.clamp(torch.abs(x) - lam, min=0.0)
+
+    def proximal_lasso(self, X, y, alpha=1e-2, lr=1e-3, max_iter=500):
+        n, p = X.shape
+        w = torch.zeros(p)
+        for k in range(max_iter):
+            grad = X.T @ (X @ w - y) / n
+            w = self.soft_threshold(w - lr * grad, lr * alpha)
+        return w
+
 
     def forward(self, x_molecular: torch.Tensor, x_cytogenetic: torch.Tensor, x_clinical: torch.Tensor) -> torch.Tensor:
         embedded_mol = self.mol_embedding(x_molecular)
@@ -91,12 +100,14 @@ class DeepSurv(pl.LightningModule):
         return loss
 
     def cox_ph_loss(self, risk_pred: torch.Tensor, time: torch.Tensor, event: torch.Tensor) -> torch.Tensor:
+
         order = torch.argsort(time, descending=True)
-        risk_pred = risk_pred[order]
+        risk_pred = risk_pred[order] 
         event = event[order]
         log_cum_risk = torch.logcumsumexp(risk_pred, dim=0)
         diff = risk_pred - log_cum_risk
         loss = -torch.sum(diff * event) / torch.sum(event)
+
         return loss
 
     # ============================
@@ -110,6 +121,19 @@ class DeepSurv(pl.LightningModule):
         event = batch["target_event"]
 
         risk_pred = self.forward(x_mol, x_cyto, x_clin).squeeze()
+        
+        if risk_pred.isnan().any():
+            nan_positions = torch.where(risk_pred.isnan())[0]
+            print(f"NaN detected in risk_pred at positions: {nan_positions.tolist()}")
+            print(f"risk_pred shape: {risk_pred.shape}")
+
+
+        if x_mol.isnan().any():
+            print("NaN detected in molecular input")
+        if x_cyto.isnan().any():
+            print("NaN detected in cytogenetic input")
+        if x_clin.isnan().any():
+            print("NaN detected in clinical input")
 
         if self.loss_type == "cox":
             loss = self.cox_ph_loss(risk_pred, time, event)

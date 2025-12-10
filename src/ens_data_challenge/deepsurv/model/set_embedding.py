@@ -14,6 +14,7 @@ class SetAttention(nn.Module):
         self.v = nn.Linear(hidden_dim, hidden_dim)
         # Projection finale
         self.out = nn.Linear(hidden_dim, output_dim)
+        self.norm = nn.LayerNorm(hidden_dim)
 
     def forward(self, x: torch.Tensor):
         """
@@ -27,7 +28,7 @@ class SetAttention(nn.Module):
 
         # Attention scores
         attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / (h.size(-1) ** 0.5)  # [B, L, L]
-        attn_weights = F.softmax(attn_scores, dim=-1)  # [B, L, L]
+        attn_weights = F.softmax(attn_scores - attn_scores.max(dim=-1, keepdim=True).values, dim=-1)
 
         # Weighted sum
         attended = torch.matmul(attn_weights, V)  # [B, L, H]
@@ -36,4 +37,6 @@ class SetAttention(nn.Module):
         pooled = attended.mean(dim=1)  # [B, H]
 
         # Projection finale
-        return self.out(pooled)  # [B, output_dim]
+        x = self.out(pooled)  # [B, output_dim]
+        x = self.norm(x)  # Normalisation
+        return x

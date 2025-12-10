@@ -56,8 +56,8 @@ class CustomSurvDataset(Dataset):
         targets_event = self.targets_event.loc[patient_id]
 
         return {
-            'molecular': torch.tensor(molecular, dtype=torch.float32).sum(dim=0, keepdim=True),
-            'cytogenetic': torch.tensor(cytogenetic, dtype=torch.float32).sum(dim=0, keepdim=True),  # moyenne si plusieurs lignes
+            'molecular': torch.tensor(molecular, dtype=torch.float32),
+            'cytogenetic': torch.tensor(cytogenetic, dtype=torch.float32),  # moyenne si plusieurs lignes
             'clinical': torch.tensor(clinical, dtype=torch.float32),
             'target_time': torch.tensor(targets_time, dtype=torch.float32),
             'target_event': torch.tensor(targets_event, dtype=torch.float32),

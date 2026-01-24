@@ -1,16 +1,10 @@
 import pytest
 import pandas as pd
-from typing import cast, List
-
 
 from ens_data_challenge.preprocess.cytogenetic_parser.parser import (
     CytogeneticsParser,
     CytogeneticsPatterns,
 )
-from ens_data_challenge.preprocess.cytogenetic_parser.types import (
-    ParsedKaryotypeDict,
-)
-from ens_data_challenge.preprocess.cytogenetic_parser.parser import ParsedKaryotype
 from ens_data_challenge.preprocess.cytogenetic_parser.parser import ParsedKaryotype
 from ens_data_challenge.globals import TRAIN_CLINICAL_DATA_PATH, TEST_CLINICAL_DATA_PATH
 
@@ -39,7 +33,7 @@ def test_parse_normal_karyotype(parser: CytogeneticsParser) -> None:
     assert parsed is not None
     assert len(parsed) == 1
     result = parsed[0].to_dict()
-    assert result['is_normal'] == True
+    assert result['is_normal']
     assert result['ploidy'] == 46
     assert result['sex_chromosomes'] == 'XY'
 
@@ -76,7 +70,7 @@ def test_parse_complex_karyotype(parser: CytogeneticsParser) -> None:
     d2 = clone2.to_dict()
     assert d2['ploidy'] == 46
     assert d2['sex_chromosomes'] == 'XY'
-    assert d2['is_normal'] == True
+    assert d2['is_normal']
     assert clone2.cell_count == 15
 
 
@@ -163,9 +157,9 @@ def test_edge_cases(parser: CytogeneticsParser) -> None:
     assert '1' in clone2.markers
 
 def test_is_normal_karyotype(parser: CytogeneticsParser) -> None:
-    assert parser._is_normal_karyotype("46,XY") == True
-    assert parser._is_normal_karyotype("46,XX") == True
-    assert parser._is_normal_karyotype("47,XY,+8") == False
+    assert parser._is_normal_karyotype("46,XY")
+    assert parser._is_normal_karyotype("46,XX")
+    assert not parser._is_normal_karyotype("47,XY,+8")
 
 
 def test_extract_ploidy(parser: CytogeneticsParser) -> None:

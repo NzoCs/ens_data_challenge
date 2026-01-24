@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from collections import Counter
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional
 
 from ens_data_challenge.preprocess.molecular_extractor import (
     COSMICDatabaseLoader,

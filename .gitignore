@@ -19,3 +19,6 @@ data/
 **.yml
 logs/
 lightning_logs/
+
+
+submissions/

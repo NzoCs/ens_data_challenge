@@ -604,12 +604,12 @@ class CytogeneticsExtractor:
 
     def gen_structured_dataframe(
         self,
-        df: pd.DataFrame,
+        clinical_data: pd.DataFrame,
         cyto_col: str = "CYTOGENETICS",
     ) -> pd.DataFrame:
         """Génère un DataFrame structuré à partir des données cytogénétiques brutes qui résume chaque anomalie
         Args:
-            df: DataFrame d'entrée avec une colonne de karyotypes bruts
+            df: DataFrame d'entrée qui est extrais du dataset clinique
             cyto_col: Nom de la colonne contenant les karyotypes bruts
         Returns:
             DataFrame structuré avec une ligne par anomalie cytogénétique
@@ -635,7 +635,7 @@ class CytogeneticsExtractor:
             "raw",
         ]
 
-        for idx, row in df.iterrows():
+        for idx, row in clinical_data.iterrows():
             patient_id = row["ID"]
             cyto = row[cyto_col]
             parsed_list = parser.parse(cyto)

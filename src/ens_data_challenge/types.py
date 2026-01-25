@@ -1,4 +1,4 @@
-from enum import StrEnum
+from enum import StrEnum, Enum
 
 
 class Columns(StrEnum):
@@ -185,32 +185,32 @@ PATHWAY_GENES = {
 }
 
 
-class MdsIpssRCytoRisk(StrEnum):
-    VERY_GOOD = "Very Good"
-    GOOD = "Good"
-    INTERMEDIATE = "Intermediate"
-    POOR = "Poor"
-    VERY_POOR = "Very Poor"
-    UNKNOWN = "Unknown"
+class MdsIpssRCytoRisk(Enum):
+    VERY_GOOD = 5
+    GOOD = 4
+    INTERMEDIATE = 3
+    POOR = 2
+    VERY_POOR = 1
+    UNKNOWN = 2.5
 
 
-class AmlEln2022CytoRisk(StrEnum):
-    FAVORABLE = "very low"
-    INTERMEDIATE = "intermediate"
-    ADVERSE = "very high"
-    UNKNOWN = "unknown"
+class AmlEln2022CytoRisk(Enum):
+    FAVORABLE = 3
+    INTERMEDIATE = 2
+    ADVERSE = 1
+    UNKNOWN = 2
 
 
-class CllCytoRisk(StrEnum):
-    VERY_LOW = "very low"
-    LOW = "low"
-    INTERMEDIATE = "intermediate"
-    HIGH = "high"
-    VERY_HIGH = "very high"
-    UNKNOWN = "unknown"
+class CllCytoRisk(Enum):
+    VERY_LOW = 5
+    LOW = 4
+    INTERMEDIATE = 3
+    HIGH = 2
+    VERY_HIGH = 1
+    UNKNOWN = 2.5
 
 
-class MmRissCytoRisk(StrEnum):
-    HIGH = "high"
-    INTERMEDIATE = "intermediate"
-    UNKNOWN = "unknown"
+class MmRissCytoRisk(Enum):
+    HIGH = 2
+    INTERMEDIATE = 1
+    UNKNOWN = 1.5

@@ -25,7 +25,6 @@ class Preprocessor(BaseEstimator):
         self.allowed_cat_molecular: Dict[str, List[str]] = {}
         self.allowed_cat_clinical: Dict[str, List[str]] = {}
         self.allowed_cat_cyto_struct: Dict[str, List[str]] = {}
-        self.remains_ids: List[Any] = []
 
     def get_cyto_features_and_df(
         self, clinical_data: pd.DataFrame
@@ -56,7 +55,7 @@ class Preprocessor(BaseEstimator):
 
         return clinical_data_with_cyto, cyto_struct
 
-    def fit(
+    def _fit(
         self,
         clinical_data_train: pd.DataFrame,
         molecular_data_train: pd.DataFrame,
@@ -64,7 +63,6 @@ class Preprocessor(BaseEstimator):
         molecular_data_test: pd.DataFrame,
         cyto_struct_train: pd.DataFrame,
         cyto_struct_test: pd.DataFrame,
-        targets: pd.DataFrame,
     ) -> None:
         """Fit the preprocessor on training data and ensure consistency with test data.
         Needs to be called before transform."""
@@ -108,23 +106,15 @@ class Preprocessor(BaseEstimator):
             data_type="cyto_struct",
         )
 
-        # Nettoyer les targets
-        targets = targets.copy()
-
-        # 2. Vérifier le masque
-        mask = targets.isna().any(axis=1)
-
-        # 3. Vérifier targets APRÈS nettoyage
-        targets_clean = targets[~mask].reset_index(drop=True)
-
-        self.remains_ids = targets_clean["ID"].values.tolist()
-
         return
 
-    def clean_targets(
+    def clean_train_data(
         self,
         targets: pd.DataFrame,
-    ) -> pd.DataFrame:
+        clinical_data: pd.DataFrame,
+        molecular_data: pd.DataFrame,
+        cyto_struct: pd.DataFrame,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """Clean the targets by removing rows with missing values.
         Args:
             targets (pd.DataFrame): Target labels.
@@ -140,13 +130,34 @@ class Preprocessor(BaseEstimator):
         # 3. Vérifier targets APRÈS nettoyage
         targets_clean = targets[~mask].reset_index(drop=True)
 
-        return targets_clean
+        self.remains_ids = targets_clean["ID"].tolist()
+
+        
+        drop_clinical_cols = [
+            Columns.CYTOGENETICS.value,
+            Columns.MONOCYTES.value,
+        ]
+        clinical_data.drop(columns=drop_clinical_cols, errors="ignore", inplace=True)
+
+        clinical_data = clinical_data[
+            clinical_data["ID"].isin(self.remains_ids)
+        ].reset_index(drop=True)
+
+        molecular_data = molecular_data[
+            molecular_data["ID"].isin(self.remains_ids)
+        ].reset_index(drop=True)
+
+        cyto_struct = cyto_struct[cyto_struct["ID"].isin(self.remains_ids)].reset_index(
+            drop=True
+        )
+
+        return targets_clean, clinical_data, molecular_data, cyto_struct
 
     def fit_transform(
         self,
-        clinical_data: pd.DataFrame,
-        molecular_data: pd.DataFrame,
+        clinical_data_train: pd.DataFrame,
         clinical_data_test: pd.DataFrame,
+        molecular_data_train: pd.DataFrame,
         molecular_data_test: pd.DataFrame,
         cyto_struct_train: pd.DataFrame,
         cyto_struct_test: pd.DataFrame,
@@ -160,37 +171,37 @@ class Preprocessor(BaseEstimator):
         pd.DataFrame,
         pd.DataFrame,
     ]:
-        """Fit the preprocessor and transform the data in one step.
+        """Fit the preprocessor and transform the data in one step, this should be called on training data before transform on test data.
         Args:
-            clinical_data (pd.DataFrame): Clinical data.
-            molecular_data (pd.DataFrame): Molecular data.
-            clinical_data_test (pd.DataFrame): Clinical test data.
-            molecular_data_test (pd.DataFrame): Molecular test data.
-            cyto_struct_data (pd.DataFrame): Cytogenetics structured data.
+            clinical_data_train (pd.DataFrame): Clinical training data.
+            molecular_data_train (pd.DataFrame): Molecular training data.
+            cyto_struct_train (pd.DataFrame): Cytogenetics structured training data.
             targets (pd.DataFrame): Target labels.
         Returns:
             Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
                 - Cleaned clinical training data with cytogenetics features.
-                - Cleaned molecular training data.
-                - Cleaned cytogenetics structured training data.
                 - Cleaned clinical test data with cytogenetics features.
+                - Cleaned molecular training data.
                 - Cleaned molecular test data.
+                - Cleaned cytogenetics structured training data.
+                - Cleaned cytogenetics structured test data.
                 - Cleaned targets."""
 
-        self.fit(
-            clinical_data,
-            molecular_data,
+        self._fit(
+            clinical_data_train,
+            molecular_data_train,
             clinical_data_test,
             molecular_data_test,
             cyto_struct_train,
             cyto_struct_test,
-            targets,
         )
 
-        targets = self.clean_targets(targets)
+        targets, clinical_data_train, molecular_data_train, cyto_struct_train = self.clean_train_data(
+            targets, clinical_data_train, molecular_data_train, cyto_struct_train
+        )
 
-        clinical_data, molecular_data, cyto_struct_train = self.transform(
-            clinical_data, molecular_data, cyto_struct_train
+        clinical_data_train, molecular_data_train, cyto_struct_train = self.transform(
+            clinical_data_train, molecular_data_train, cyto_struct_train
         )
 
         clinical_data_test, molecular_data_test, cyto_struct_test = self.transform(
@@ -198,9 +209,9 @@ class Preprocessor(BaseEstimator):
         )
 
         return (
-            clinical_data,
-            molecular_data,
+            clinical_data_train,
             clinical_data_test,
+            molecular_data_train,
             molecular_data_test,
             cyto_struct_train,
             cyto_struct_test,
@@ -239,22 +250,6 @@ class Preprocessor(BaseEstimator):
 
         # categorical consistency
         self._apply_categorical_consistency(molecular_data, clinical_data, cyto_struct)
-
-        drop_clinical_cols = [
-            Columns.CYTOGENETICS.value,
-            Columns.MONOCYTES.value,
-        ]
-        clinical_data.drop(columns=drop_clinical_cols, errors="ignore", inplace=True)
-
-        clinical_data = clinical_data[
-            clinical_data["ID"].isin(self.remains_ids)
-        ].reset_index(drop=True)
-        molecular_data = molecular_data[
-            molecular_data["ID"].isin(self.remains_ids)
-        ].reset_index(drop=True)
-        cyto_struct = cyto_struct[cyto_struct["ID"].isin(self.remains_ids)].reset_index(
-            drop=True
-        )
 
         return clinical_data, molecular_data, cyto_struct
 

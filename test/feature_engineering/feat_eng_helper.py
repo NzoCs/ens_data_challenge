@@ -49,13 +49,6 @@ def test_as_type(helper: FeatureEngineerHelper):
     assert pd.api.types.is_float_dtype(out['b'])
 
 
-def test_encode_risk(helper: FeatureEngineerHelper):
-    df = pd.DataFrame({'risk': ['low', 'high', 'very low', 'intermediate']})
-    out = helper.encode_risk(df, ['risk'])
-    expected = [1, 3, 0, 2]
-    assert out['risk'].tolist() == expected
-
-
 def test_one_hot_fit_transform(helper: FeatureEngineerHelper):
     train = pd.DataFrame({'cat': ['A', 'B', 'A']})
     helper.one_hot_encode_fit(train, ['cat'])

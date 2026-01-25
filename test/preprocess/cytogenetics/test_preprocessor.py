@@ -134,7 +134,14 @@ def test_target_filtering(sample_data):
         targets_train.loc[targets_train["ID"] == target_id_to_nan, "y"] = np.nan
 
         preprocessor = Preprocessor()
-        preprocessor.fit(
+        (   clinical_train,
+            molecular_train,
+            cyto_struct_train,
+            clinical_test,
+            molecular_test,
+            cyto_struct_test,
+            targets_train,
+            ) = preprocessor.fit_transform(
             clinical_train,
             molecular_train,
             clinical_test,
@@ -144,13 +151,9 @@ def test_target_filtering(sample_data):
             targets_train,
         )
 
-        clin_res, mol_res, cyto_res = preprocessor.transform(
-            clinical_train, molecular_train, cyto_struct_train
-        )
-
         # That ID should be dropped
         assert target_id_to_nan not in preprocessor.remains_ids
-        assert target_id_to_nan not in clin_res[Columns.ID.value].values
+        assert target_id_to_nan not in clinical_train[Columns.ID.value].values
 
 
 def test_categorical_consistency(sample_data):
@@ -191,7 +194,15 @@ def test_categorical_consistency(sample_data):
     molecular_test.at[mol_test_idx1, MolecularColumns.GENE.value] = "COMMON"
 
     preprocessor = Preprocessor()
-    preprocessor.fit(
+    
+    (   clinical_train,
+        mol_res_train,
+        cyto_struct_train,
+        clinical_test,
+        molecular_test,
+        cyto_struct_test,
+        targets_train,
+    ) = preprocessor.fit_transform(
         clinical_train,
         molecular_train,
         clinical_test,
@@ -206,15 +217,6 @@ def test_categorical_consistency(sample_data):
     assert "COMMON" in allowed_genes
     assert "TRAIN_ONLY" not in allowed_genes
     assert "TEST_ONLY" not in allowed_genes
-
-    # Transform Train
-    # We need a targets dataframe that matches the clinical IDs
-    # Since we are just testing categorical consistency on molecular data, we can use the original targets
-    # provided they match ID.
-
-    _, mol_res_train, _ = preprocessor.transform(
-        clinical_train, molecular_train, cyto_struct_train
-    )
 
     # 'TRAIN_ONLY' should become 'OTHER' because it wasn't in Test
     _genes_res = mol_res_train[MolecularColumns.GENE.value]

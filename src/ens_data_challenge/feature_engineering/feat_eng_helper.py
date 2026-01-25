@@ -23,41 +23,6 @@ class FeatureEngineerHelper:
             data[col] = data[col].astype(dtype)
         
         return data
-
-    def encode_risk(
-            self,
-            data: pd.DataFrame,
-            categorical_cols: List[str],
-            ) -> pd.DataFrame:
-        """Encode risk categories with numerical values for specified columns in the specified dataframes.
-
-        Args:
-            data: dataframe to encode.
-            categorical_cols: list of column names to encode.
-
-        Returns:
-            pd.DataFrame: DataFrame with encoded risk categories.
-        """
-
-        df = data.copy()
-
-        # Validate input columns
-        missing_cols = [c for c in categorical_cols if c not in df.columns]
-        if missing_cols:
-            raise KeyError(f"Columns missing from dataframe: {missing_cols}")
-
-        # Map risk categories to numerical values
-        risk_mapping = {
-            "very low": 0,
-            "low": 1,
-            "intermediate": 2,
-            "high": 3,
-            "very high": 4
-        }
-        for col in categorical_cols:
-            df[col] = df[col].map(risk_mapping)
-
-        return df
     
     def one_hot_encode_fit(
             self,
@@ -325,7 +290,7 @@ class FeatureEngineerHelper:
 
     def add_mol_encoding(
         self,
-        data: pd.DataFrame,
+        clinical_data: pd.DataFrame,
         molecular_data: pd.DataFrame,
         col: Literal['GENE', 'PATHWAY'],
         method: Literal['confidence_weighted', 'bayesian', 'vaf_score', 'log_vaf', 'depth_score', 'constant'],
@@ -335,7 +300,7 @@ class FeatureEngineerHelper:
         """Ajoute des colonnes encodées basées sur les données moléculaires au DataFrame clinique spécifié.
 
         Args:
-            data: DataFrame clinique (train ou test) avec colonne 'ID'
+            clinical_data: DataFrame clinique (train ou test) avec colonne 'ID'
             molecular_data: DataFrame moléculaire avec colonnes ID, GENE, VAF, DEPTH. Si None, utilise self.molecular_train et self.molecular_test.
             categories_to_include: liste optionnelle de catégories à inclure. Si None, utilise
                                    le filtrage par `min_patient_frequency`.
@@ -384,7 +349,7 @@ class FeatureEngineerHelper:
         df_for_merge = molecular_data.reset_index()
 
         # Merge (left) — si certains patients n'ont pas de ligne dans la matrice, on remplira par 0
-        new_clinical_data = data.merge(df_for_merge, on='ID', how='left')
+        new_clinical_data = clinical_data.merge(df_for_merge, on='ID', how='left')
 
         mask = new_clinical_data.isna()
         new_clinical_data[mask] = 0
